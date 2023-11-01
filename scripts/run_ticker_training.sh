@@ -21,4 +21,5 @@ python -u run.py \
   --itr 3 \
   --do_predict \
   --freq u \
-  --detail_freq u
+  --detail_freq u \
+  --use_gpu True
