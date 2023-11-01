@@ -5,10 +5,7 @@ from layers.Embed import DataEmbedding, DataEmbedding_wo_pos
 from layers.AutoCorrelation import AutoCorrelation, AutoCorrelationLayer
 from layers.FourierCorrelation import FourierBlock, FourierCrossAttention
 from layers.MultiWaveletCorrelation import MultiWaveletCross, MultiWaveletTransform
-from layers.SelfAttention_Family import FullAttention, ProbAttention
 from layers.Autoformer_EncDec import Encoder, Decoder, EncoderLayer, DecoderLayer, my_Layernorm, series_decomp, series_decomp_multi
-import math
-import numpy as np
 
 
 device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
