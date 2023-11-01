@@ -94,7 +94,7 @@ class TimeFeatureEmbedding(nn.Module):
     def __init__(self, d_model, embed_type='timeF', freq='h'):
         super(TimeFeatureEmbedding, self).__init__()
 
-        freq_map = {'h': 4, 't': 5, 's': 6, 'm': 1, 'a': 1, 'w': 2, 'd': 3, 'b': 3}
+        freq_map = {'h': 4, 't': 5, 's': 6, 'm': 1, 'a': 1, 'w': 2, 'd': 3, 'b': 3, 'u': 7}
         d_inp = freq_map[freq]
         self.embed = nn.Linear(d_inp, d_model, bias=False)
 
@@ -117,6 +117,7 @@ class DataEmbedding(nn.Module):
         x = self.value_embedding(x) + self.temporal_embedding(x_mark) + self.position_embedding(x)
         return self.dropout(x)
 
+
 class DataEmbedding_onlypos(nn.Module):
     def __init__(self, c_in, d_model, embed_type='fixed', freq='h', dropout=0.1):
         super(DataEmbedding_onlypos, self).__init__()
@@ -128,7 +129,8 @@ class DataEmbedding_onlypos(nn.Module):
     def forward(self, x, x_mark):
         x = self.value_embedding(x) + self.position_embedding(x)
         return self.dropout(x)
-    
+
+
 class DataEmbedding_wo_pos(nn.Module):
     def __init__(self, c_in, d_model, embed_type='fixed', freq='h', dropout=0.1):
         super(DataEmbedding_wo_pos, self).__init__()
