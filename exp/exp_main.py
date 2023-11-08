@@ -310,3 +310,65 @@ class Exp_Main(Exp_Basic):
         np.save(folder_path + 'real_prediction.npy', preds)
 
         return
+
+    def simulate(self, setting, load=False):
+        simulation_data, simulation_loader = self._get_data(flag='simulation')
+
+        if load:
+            path = os.path.join(self.args.checkpoints, setting)
+            best_model_path = path + '/' + 'checkpoint.pth'
+            self.model.load_state_dict(torch.load(best_model_path))
+
+        preds = []
+        trues = []
+
+        self.model.eval()
+        # init timer
+        time_now = time.time()
+        with torch.no_grad():
+            for i, (batch_x, batch_y, batch_x_mark, batch_y_mark) in enumerate(simulation_loader):
+                batch_x = batch_x.float().to(self.device)
+                batch_y = batch_y.float()
+                batch_x_mark = batch_x_mark.float().to(self.device)
+                batch_y_mark = batch_y_mark.float().to(self.device)
+
+                # decoder input
+                dec_inp = torch.zeros_like(batch_y[:, -self.args.pred_len:, :]).float()
+                dec_inp = torch.cat([batch_y[:, :self.args.label_len, :], dec_inp], dim=1).float().to(self.device)
+                # encoder - decoder
+                if self.args.use_amp:
+                    with torch.cuda.amp.autocast():
+                        if self.args.output_attention:
+                            outputs = self.model(batch_x, batch_x_mark, dec_inp, batch_y_mark)[0]
+                        else:
+                            outputs = self.model(batch_x, batch_x_mark, dec_inp, batch_y_mark)
+                else:
+                    if self.args.output_attention:
+                        outputs = self.model(batch_x, batch_x_mark, dec_inp, batch_y_mark)[0]
+                    else:
+                        outputs = self.model(batch_x, batch_x_mark, dec_inp, batch_y_mark)
+
+                batch_y = batch_y[:, -self.args.pred_len:, :].to(self.device)
+                outputs = outputs.detach().cpu().numpy()
+                batch_y = batch_y.detach().cpu().numpy()
+
+                inversed_scaled_outputs = simulation_data.inverse_transform(outputs[0])
+                inversed_scaled_batch_y = simulation_data.inverse_transform(batch_y[0])
+
+                pred_sum_logreturns = np.sum(inversed_scaled_outputs[0:self.args.steps_look_ahead, 4])
+                pred_change = np.exp(pred_sum_logreturns)
+                preds.append(pred_change) # outputs.detach().cpu().numpy()  # .squeeze()
+
+                true_sum_logreturns = np.sum(inversed_scaled_batch_y[0:self.args.steps_look_ahead, 4])
+                true_change = np.exp(true_sum_logreturns)
+                trues.append(true_change)
+
+                # print i every 10 steps
+                if i % 100 == 0:
+                    print(i)
+            # print time elapsed
+            print(time.time() - time_now)
+            # print time elapsed per step in microseconds
+            print((time.time() - time_now) / i * 1000000)
+
+        return preds, trues
