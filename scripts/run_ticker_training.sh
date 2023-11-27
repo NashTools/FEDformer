@@ -8,9 +8,9 @@ python -u run.py \
   --data multi \
   --data_prefix trial \
   --features MS \
-  --seq_len 96 \
-  --label_len 48 \
-  --pred_len 96 \
+  --seq_len 64 \
+  --label_len 32 \
+  --pred_len 64 \
   --e_layers 2 \
   --d_layers 1 \
   --factor 3 \
