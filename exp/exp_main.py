@@ -143,7 +143,7 @@ class Exp_Main(Exp_Basic):
                     f_dim = -1 if self.args.features == 'MS' else 0
                     batch_y = batch_y[:, -self.args.pred_len:, f_dim:].to(self.device)
 
-                    loss = criterion(outputs, batch_y)
+                    loss = criterion(outputs[:, :, f_dim:], batch_y)
                     train_loss.append(loss.item())
 
                 if (i + 1) % 100 == 0:
@@ -225,7 +225,7 @@ class Exp_Main(Exp_Basic):
                 outputs = outputs.detach().cpu().numpy()
                 batch_y = batch_y.detach().cpu().numpy()
 
-                pred = outputs  # outputs.detach().cpu().numpy()  # .squeeze()
+                pred = outputs[:, :, f_dim:]  # outputs.detach().cpu().numpy()  # .squeeze()
                 true = batch_y  # batch_y.detach().cpu().numpy()  # .squeeze()
 
                 preds.append(pred)
@@ -322,6 +322,10 @@ class Exp_Main(Exp_Basic):
         preds = []
         trues = []
 
+        metric_preds = []
+        metric_trues = []
+        metric_baselines = []
+
         self.model.eval()
         # init timer
         time_now = time.time()
@@ -351,6 +355,19 @@ class Exp_Main(Exp_Basic):
                 batch_y = batch_y[:, -self.args.pred_len:, :].to(self.device)
                 outputs = outputs.detach().cpu().numpy()
                 batch_y = batch_y.detach().cpu().numpy()
+                baseline = np.zeros_like(batch_y)
+                baseline_scaled = simulation_data.scaler.transform(baseline[0])
+                # add a new 0th dimension to the baseline_scaled
+                baseline_scaled = np.expand_dims(baseline_scaled, axis=0)
+
+                f_dim = -1 if self.args.features == 'MS' else 0
+                metric_true = batch_y[:, :, f_dim:]
+                metric_pred = outputs[:, :, f_dim:]
+                metric_baseline = baseline_scaled[:, :, f_dim:]
+
+                metric_trues.append(metric_true)
+                metric_preds.append(metric_pred)
+                metric_baselines.append(metric_baseline)
 
                 inversed_scaled_outputs = simulation_data.inverse_transform(outputs[0])
                 inversed_scaled_batch_y = simulation_data.inverse_transform(batch_y[0])
@@ -371,4 +388,4 @@ class Exp_Main(Exp_Basic):
             # print time elapsed per step in microseconds
             print((time.time() - time_now) / i * 1000000)
 
-        return preds, trues
+        return preds, trues, metric_trues, metric_preds, metric_baselines

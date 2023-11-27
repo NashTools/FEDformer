@@ -1,8 +1,9 @@
-from data_provider.data_loader import Dataset_Custom, Dataset_Pred, Dataset_Simulation
+from data_provider.data_loader import Dataset_Custom, Dataset_Pred, Dataset_Simulation, Dataset_Multi_Files
 from torch.utils.data import DataLoader
 
 data_dict = {
     'custom': Dataset_Custom,
+    'multi': Dataset_Multi_Files
 }
 
 
@@ -33,16 +34,25 @@ def data_provider(args, flag):
         batch_size = args.batch_size
         freq = args.freq
 
-    data_set = Data(
-        root_path=args.root_path,
-        data_path=args.data_path,
-        flag=flag,
-        size=[args.seq_len, args.label_len, args.pred_len],
-        features=args.features,
-        target=args.target,
-        timeenc=timeenc,
-        freq=freq
-    )
+    if args.data == 'multi':
+        data_set = Dataset_Multi_Files(
+            root_path=args.root_path,
+            size=[args.seq_len, args.label_len, args.pred_len],
+            data_prefix=args.data_prefix + '-' + flag,
+            target=args.target,
+            freq=freq,
+        )
+    else:
+        data_set = Data(
+            root_path=args.root_path,
+            data_path=args.data_path,
+            flag=flag,
+            size=[args.seq_len, args.label_len, args.pred_len],
+            features=args.features,
+            target=args.target,
+            timeenc=timeenc,
+            freq=freq
+        )
     print(flag, len(data_set))
     data_loader = DataLoader(
         data_set,

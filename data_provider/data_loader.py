@@ -8,6 +8,92 @@ import warnings
 warnings.filterwarnings('ignore')
 
 
+class Data_Fragment_Info:
+    def __init__(self, file_name, num_training_data, num_lines, start_index, end_index):
+        self.file_name = file_name
+        self.num_training_data = num_training_data
+        self.num_lines = num_lines
+        self.start_index = start_index
+        self.end_index = end_index
+
+
+class Dataset_Multi_Files(Dataset):
+    def __init__(self, root_path, size, data_prefix, target, scale=True, freq='u'):
+
+        self.seq_len = size[0]
+        self.label_len = size[1]
+        self.pred_len = size[2]
+
+        self.target = target
+        self.scale = scale
+        self.freq = freq
+
+        self.root_path = root_path
+        self.data_prefix = data_prefix
+        self.current_fragment = 0
+        self.data_fragments = []
+        self.total_len = 0
+
+        self.__init()
+        self.__read_data__()
+
+    def __init(self):
+        for file in os.listdir(self.root_path):
+            if file.startswith(self.data_prefix):
+                df_raw = pd.read_pickle(os.path.join(self.root_path, file))
+                num_data = len(df_raw) - self.seq_len - self.pred_len + 1
+                data_fragment_info = Data_Fragment_Info(file, num_data, len(df_raw), self.total_len, self.total_len + num_data)
+                self.data_fragments.append(data_fragment_info)
+                self.total_len += num_data
+
+        self.scaler = StandardScaler()
+
+    def __read_data__(self):
+        fragment = self.data_fragments[self.current_fragment]
+        self.data = pd.read_pickle(os.path.join(self.root_path, fragment.file_name))
+        self.data_stamp = time_features(self.data.index, freq=self.freq)
+        self.data_stamp = self.data_stamp.transpose(1, 0)
+
+    def __select_data_fragment(self, index):
+        current_max_index = 0
+        current_file_index = 0
+        for fragment in self.data_fragments:
+            current_max_index += fragment.num_training_data
+            if index <= current_max_index:
+                break
+            else:
+                current_file_index += 1
+        if current_file_index != self.current_fragment:
+            self.current_fragment = current_file_index
+            self.__read_data__()
+
+    def __getitem__(self, index):
+        self.__select_data_fragment(index)
+        s_begin = index
+        s_end = s_begin + self.seq_len
+        r_begin = s_end - self.label_len
+        r_end = r_begin + self.label_len + self.pred_len
+
+        seq_x = self.data[s_begin:s_end]
+        seq_y = self.data[r_begin:r_end]
+        seq_x_mark = self.data_stamp[s_begin:s_end]
+        seq_y_mark = self.data_stamp[r_begin:r_end]
+
+        if self.scale:
+            self.scaler.fit(seq_x.values)
+            seq_x = self.scaler.transform(seq_x)
+            seq_y = self.scaler.transform(seq_y)
+
+        return seq_x, seq_y, seq_x_mark, seq_y_mark
+
+    def __len__(self):
+        return self.total_len
+
+    def inverse_transform(self, seq_x, seq_y):
+        self.scaler.fit(seq_x)
+        return self.scaler.inverse_transform(seq_y)
+
+
 class Dataset_Custom(Dataset):
     def __init__(self, root_path, flag='train', size=None,
                  features='S', data_path='ETTh1.csv',

@@ -1,0 +1,9 @@
+{
+    "bid_price": ["b", "bidPrice", "best_bid_price"],
+    "ask_price": ["a", "askPrice", "best_ask_price"],
+    "bid_volume": ["B", "best_bid_qty"],
+    "ask_volume": ["A", "best_ask_qty"],
+    "mid_price": ["m"],
+    "log_return": ["ret"],
+    "spread": ["spr"]
+}

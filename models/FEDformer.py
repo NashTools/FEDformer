@@ -142,8 +142,8 @@ if __name__ == '__main__':
         ab = 0
         modes = 32
         mode_select = 'random'
-        # version = 'Fourier'
-        version = 'Wavelets'
+        version = 'Fourier'
+        # version = 'Wavelets'
         moving_avg = [12, 24]
         L = 1
         base = 'legendre'
