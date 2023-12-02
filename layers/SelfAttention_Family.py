@@ -6,6 +6,18 @@ import numpy as np
 from math import sqrt
 from utils.masking import TriangularCausalMask, ProbMask
 
+class OneLineAttention(nn.Module):
+    def __init__(self, mask_flag=True, scale=None, attention_dropout=0.1, output_attention=False):
+        super(OneLineAttention, self).__init__()
+        self.scale = scale
+        self.output_attention = output_attention
+        self.dropout = attention_dropout
+
+    def forward(self, queries, keys, values, attn_mask):
+        q = queries[:, -1:, :, :]
+        V = nn.functional.scaled_dot_product_attention(q, keys, values, attn_mask=None, dropout_p=self.dropout if self.training else 0, scale=self.scale)
+        return (V.contiguous(), None)
+
 
 class FullAttention(nn.Module):
     def __init__(self, mask_flag=True, factor=5, scale=None, attention_dropout=0.1, output_attention=False):

@@ -1,9 +1,10 @@
-from data_provider.data_loader import Dataset_Custom, Dataset_Pred, Dataset_Simulation, Dataset_Multi_Files
+from data_provider.data_loader import Dataset_Custom, Dataset_Pred, Dataset_Simulation, Dataset_Multi_Files, Dataset_Single_File
 from torch.utils.data import DataLoader
 
 data_dict = {
     'custom': Dataset_Custom,
-    'multi': Dataset_Multi_Files
+    'multi': Dataset_Multi_Files,
+    'single': Dataset_Single_File
 }
 
 
@@ -40,6 +41,15 @@ def data_provider(args, flag):
             size=[args.seq_len, args.label_len, args.pred_len],
             data_prefix=args.data_prefix + '-' + flag,
             target=args.target,
+            freq=freq,
+        )
+    elif args.data == 'single':
+        data_set = Dataset_Single_File(
+            root_path=args.root_path,
+            data_prefix=args.data_path + '-' + flag,
+            size=[args.seq_len, args.label_len, args.pred_len],
+            target=args.target,
+            zeros_pct=args.zeros_pct,
             freq=freq,
         )
     else:

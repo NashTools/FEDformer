@@ -1,3 +1,6 @@
+import pickle
+
+import numpy as np
 import pandas as pd
 import os
 from torch.utils.data import Dataset
@@ -16,10 +19,85 @@ class Data_Fragment_Info:
         self.start_index = start_index
         self.end_index = end_index
 
+class Dataset_Single_File(Dataset):
+    def __init__(self, root_path, file_name, size, target, zeros_pct=1.0, scale=True, freq='u'):
+        self.seq_len = size[0]
+        self.label_len = size[1]
+        self.pred_len = size[2]
+
+        self.target = target
+        self.scale = scale
+        self.zero_scaled = 0
+        self.zeros_pct = zeros_pct
+        self.freq = freq
+
+        self.root_path = root_path
+        self.file_name = file_name
+        self.target_index = None
+        self.selected_data = []
+        self.__read_data__()
+
+        if zeros_pct < 1.0:
+            self.__count__()
+
+    def __read_data__(self):
+        self.scaler = StandardScaler()
+        self.data = pd.read_pickle(os.path.join(self.root_path, self.file_name))
+        self.target_index = self.data.columns.get_loc(self.target)
+        self.data_stamp = time_features(self.data.index, freq=self.freq)
+        self.data_stamp = self.data_stamp.transpose(1, 0)
+        if self.scale:
+            self.scaler.fit(self.data.values)
+            self.data = self.scaler.transform(self.data.values)
+            # create zero matrix with the same dimensions as the self.data
+            zero_matrix = np.zeros(self.data.shape)
+            self.zero_scaled = self.scaler.transform(zero_matrix)[0][self.target_index]
+
+    def __count__(self):
+        num_data = len(self.data) - self.seq_len - self.pred_len + 1
+        zero_array = np.full(self.seq_len, self.zero_scaled)
+        for i in range(num_data):
+            seq_x, seq_y = self.__get_x_y__(i)
+
+            # check if seq_x only contains zeros
+            seq_x_zero = np.isclose(seq_x, zero_array).all()
+
+            # if seq_x_zero is True, then zero_pct of the time add i to selected_data
+            if seq_x_zero:
+                if np.random.rand() < self.zeros_pct:
+                    self.selected_data.append(i)
+            else:
+                self.selected_data.append(i)
+
+            # print every 1% of the way through the data
+            if i % (num_data // 100) == 0:
+                print(f'{i / (num_data // 100)}%')
+
+    def __get_x_y__(self, index):
+        s_end = index + self.seq_len
+        r_begin = s_end - self.label_len
+        r_end = r_begin + self.label_len + self.pred_len
+        seq_x = self.data[index:s_end, self.target_index]
+        seq_y = self.data[r_begin:r_end, self.target_index]
+        return seq_x, seq_y
+
+    def __len__(self):
+        if self.zeros_pct < 1.0:
+            return len(self.selected_data)
+        else:
+            return len(self.data) - self.seq_len - self.pred_len + 1
+
+    def __getitem__(self, index):
+        if self.zeros_pct < 1.0:
+            index = self.selected_data[index]
+        seq_x, seq_y = self.__get_x_y__(index)
+        seq_x_mark = self.data_stamp[index:index + self.seq_len]
+        seq_y_mark = self.data_stamp[index + self.seq_len - self.label_len:index + self.seq_len + self.pred_len]
+        return seq_x, seq_y, seq_x_mark, seq_y_mark
+
 
 class Dataset_Multi_Files(Dataset):
     def __init__(self, root_path, size, data_prefix, target, scale=True, freq='u'):
-
         self.seq_len = size[0]
         self.label_len = size[1]
         self.pred_len = size[2]
@@ -39,7 +117,8 @@ class Dataset_Multi_Files(Dataset):
 
     def __init(self):
         for file in os.listdir(self.root_path):
-            if file.startswith(self.data_prefix):
+            # if file does not contain _selected, then it is a data file
+            if file.startswith(self.data_prefix) and not file.endswith('_selected.pkl'):
                 df_raw = pd.read_pickle(os.path.join(self.root_path, file))
                 num_data = len(df_raw) - self.seq_len - self.pred_len + 1
                 data_fragment_info = Data_Fragment_Info(file, num_data, len(df_raw), self.total_len, self.total_len + num_data)
@@ -53,6 +132,9 @@ class Dataset_Multi_Files(Dataset):
         self.data = pd.read_pickle(os.path.join(self.root_path, fragment.file_name))
         self.data_stamp = time_features(self.data.index, freq=self.freq)
         self.data_stamp = self.data_stamp.transpose(1, 0)
+        if self.scale:
+            self.scaler.fit(self.data.values)
+            self.data = self.scaler.transform(self.data.values)
 
     def __select_data_fragment(self, index):
         current_max_index = 0
@@ -79,18 +161,13 @@ class Dataset_Multi_Files(Dataset):
         seq_x_mark = self.data_stamp[s_begin:s_end]
         seq_y_mark = self.data_stamp[r_begin:r_end]
 
-        if self.scale:
-            self.scaler.fit(seq_x.values)
-            seq_x = self.scaler.transform(seq_x)
-            seq_y = self.scaler.transform(seq_y)
-
         return seq_x, seq_y, seq_x_mark, seq_y_mark
 
     def __len__(self):
         return self.total_len
 
     def inverse_transform(self, seq_x, seq_y):
-        self.scaler.fit(seq_x)
+        # self.scaler.fit(seq_x)
         return self.scaler.inverse_transform(seq_y)
 
 
@@ -375,3 +452,22 @@ class Dataset_Simulation(Dataset):
 
     def inverse_transform(self, data):
         return self.scaler.inverse_transform(data)
+
+
+#main
+if __name__ == '__main__':
+    root_path = '../dataset/ticker/'
+    file_name = 'seven-days-train.pkl'
+    data_set = Dataset_Single_File(
+        root_path=root_path,
+        file_name=file_name,
+        size=[128, 64, 128],
+        target='log_return_s',
+        zeros_pct=0.03,
+        scale=True
+    )
+    print(len(data_set))
+    print(len(data_set) / (len(data_set.data) - data_set.seq_len - data_set.pred_len + 1))
+    # save date_set.selected_data to a file
+    with open('../dataset/ticker/seven-days-train_selected.pkl', 'wb') as f:
+        pickle.dump(data_set.selected_data, f)

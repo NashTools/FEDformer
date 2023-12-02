@@ -83,6 +83,7 @@ class Exp_Main(Exp_Basic):
         self.model.train()
         return total_loss
 
+
     def train(self, setting):
         train_data, train_loader = self._get_data(flag='train')
         vali_data, vali_loader = self._get_data(flag='val')
@@ -146,11 +147,11 @@ class Exp_Main(Exp_Basic):
                     loss = criterion(outputs[:, :, f_dim:], batch_y)
                     train_loss.append(loss.item())
 
-                if (i + 1) % 100 == 0:
-                    # print("\titers: {0}, epoch: {1} | loss: {2:.7f}".format(i + 1, epoch + 1, loss.item()))
+                if (i + 1) % 1000 == 0:
+                    print("\titers: {0}, epoch: {1} | loss: {2:.7f}".format(i + 1, epoch + 1, loss.item()))
                     speed = (time.time() - time_now) / iter_count
                     left_time = speed * ((self.args.train_epochs - epoch) * train_steps - i)
-                    # print('\tspeed: {:.4f}s/iter; left time: {:.4f}s'.format(speed, left_time))
+                    print('\tspeed: {:.4f}s/iter; left time: {:.4f}s'.format(speed, left_time))
                     iter_count = 0
                     time_now = time.time()
 

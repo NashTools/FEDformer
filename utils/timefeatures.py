@@ -113,9 +113,7 @@ def time_features_from_frequency_str(freq_str: str) -> List[TimeFeature]:
             DayOfYear,
         ],
         offsets.Micro: [
-            MicrosecondOfSecond,
-            SecondOfMinute,
-            MinuteOfHour
+            MicrosecondOfSecond
         ],
     }
 

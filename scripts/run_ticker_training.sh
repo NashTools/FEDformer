@@ -8,12 +8,12 @@ python -u run.py \
   --data multi \
   --data_prefix trial \
   --features MS \
-  --seq_len 64 \
-  --label_len 32 \
+  --seq_len 128 \
+  --label_len 64 \
   --pred_len 64 \
-  --e_layers 2 \
+  --e_layers 1 \
   --d_layers 1 \
-  --factor 3 \
+  --factor 2 \
   --enc_in 8 \
   --dec_in 8 \
   --c_out 8 \
@@ -22,7 +22,7 @@ python -u run.py \
   --freq u \
   --detail_freq u \
   --use_gpu True \
-  --d_ff 128 \
+  --d_ff 64 \
   --d_model 64 \
   --target log_return_s \
   --modes 32 \

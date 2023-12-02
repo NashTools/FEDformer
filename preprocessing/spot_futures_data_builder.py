@@ -140,5 +140,10 @@ if __name__ == "__main__":
     cols.pop(cols.index("log_return_s"))
     d = d[cols + ["log_return_s"]]
     d = d.loc[:, ~d.columns.str.contains("price")]
-    d[120000:150000].to_pickle("../dataset/trial-test.pkl")
-    print("done")
+    # select rows where date is before 8th of June
+    train = d.loc[:"2023-06-08"]
+    train.to_pickle("../dataset/seven-days-train.pkl")
+    val = d.loc["2023-06-08":"2023-06-09"]
+    val.to_pickle("../dataset/seven-days-val.pkl")
+    test = d.loc["2023-06-09":"2023-06-10"]
+    test.to_pickle("../dataset/seven-days-test.pkl")
