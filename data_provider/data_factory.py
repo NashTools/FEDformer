@@ -46,10 +46,11 @@ def data_provider(args, flag):
     elif args.data == 'single':
         data_set = Dataset_Single_File(
             root_path=args.root_path,
-            data_prefix=args.data_path + '-' + flag,
+            file_name=args.data_prefix + '-' + flag + '.pkl',
             size=[args.seq_len, args.label_len, args.pred_len],
             target=args.target,
             zeros_pct=args.zeros_pct,
+            selected_data_src=args.data_prefix + '-' + flag + '_selected.pkl',
             freq=freq,
         )
     else:

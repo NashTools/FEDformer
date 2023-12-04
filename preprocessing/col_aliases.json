@@ -5,5 +5,8 @@
     "ask_volume": ["A", "best_ask_qty"],
     "mid_price": ["m"],
     "log_return": ["ret"],
-    "spread": ["spr"]
+    "spread": ["spr"],
+    "id": ["update_id", "u"],
+    "id_change": ["idchg", "id_chg"],
+    "dq": ["dq"]
 }

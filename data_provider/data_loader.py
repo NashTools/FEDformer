@@ -19,8 +19,9 @@ class Data_Fragment_Info:
         self.start_index = start_index
         self.end_index = end_index
 
+
 class Dataset_Single_File(Dataset):
-    def __init__(self, root_path, file_name, size, target, zeros_pct=1.0, scale=True, freq='u'):
+    def __init__(self, root_path, file_name, size, target, zeros_pct=1.0, selected_data_src=None, scale=True, freq='u'):
         self.seq_len = size[0]
         self.label_len = size[1]
         self.pred_len = size[2]
@@ -37,8 +38,11 @@ class Dataset_Single_File(Dataset):
         self.selected_data = []
         self.__read_data__()
 
-        if zeros_pct < 1.0:
+        if zeros_pct < 1.0 and selected_data_src is None:
             self.__count__()
+
+        if selected_data_src is not None:
+            self.__read_selected_data__(selected_data_src),
 
     def __read_data__(self):
         self.scaler = StandardScaler()
@@ -53,11 +57,16 @@ class Dataset_Single_File(Dataset):
             zero_matrix = np.zeros(self.data.shape)
             self.zero_scaled = self.scaler.transform(zero_matrix)[0][self.target_index]
 
+    def __read_selected_data__(self, selected_data_src):
+        path = os.path.join(self.root_path, selected_data_src)
+        with open(path, 'rb') as data:
+            self.selected_data = pickle.load(data)
+
     def __count__(self):
         num_data = len(self.data) - self.seq_len - self.pred_len + 1
         zero_array = np.full(self.seq_len, self.zero_scaled)
         for i in range(num_data):
-            seq_x, seq_y = self.__get_x_y__(i)
+            seq_x, seq_y = self.__get_x_y__(i, self.target_index)
 
             # check if seq_x only contains zeros
             seq_x_zero = np.isclose(seq_x, zero_array).all()
@@ -73,12 +82,16 @@ class Dataset_Single_File(Dataset):
             if i % (num_data // 100) == 0:
                 print(f'{i / (num_data // 100)}%')
 
-    def __get_x_y__(self, index):
+    def __get_x_y__(self, index, selected_col_idx=None):
         s_end = index + self.seq_len
         r_begin = s_end - self.label_len
         r_end = r_begin + self.label_len + self.pred_len
-        seq_x = self.data[index:s_end, self.target_index]
-        seq_y = self.data[r_begin:r_end, self.target_index]
+        if selected_col_idx is None:
+            seq_x = self.data[index:s_end]
+            seq_y = self.data[r_begin:r_end]
+        else:
+            seq_x = self.data[index:s_end, selected_col_idx]
+            seq_y = self.data[r_begin:r_end, selected_col_idx]
         return seq_x, seq_y
 
     def __len__(self):
@@ -94,6 +107,26 @@ class Dataset_Single_File(Dataset):
         seq_x_mark = self.data_stamp[index:index + self.seq_len]
         seq_y_mark = self.data_stamp[index + self.seq_len - self.label_len:index + self.seq_len + self.pred_len]
         return seq_x, seq_y, seq_x_mark, seq_y_mark
+
+
+class Dataset_Multi_Files2(Dataset):
+    def __init__(self, root_path, size, data_prefix, target, scale=True, freq='u'):
+        self.seq_len = size[0]
+        self.label_len = size[1]
+        self.pred_len = size[2]
+
+        self.target = target
+        self.scale = scale
+        self.freq = freq
+
+        self.root_path = root_path
+        self.data_prefix = data_prefix
+        self.current_fragment = 0
+        self.data_fragments = []
+        self.total_len = 0
+
+        self.__init()
+        self.__read_data__()
 
 
 class Dataset_Multi_Files(Dataset):
@@ -454,7 +487,7 @@ class Dataset_Simulation(Dataset):
         return self.scaler.inverse_transform(data)
 
 
-#main
+# main
 if __name__ == '__main__':
     root_path = '../dataset/ticker/'
     file_name = 'seven-days-train.pkl'

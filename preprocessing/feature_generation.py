@@ -1,4 +1,5 @@
 import math
+import re
 from abc import ABC, abstractmethod
 
 import pandas as pd
@@ -94,13 +95,48 @@ class LogReturnGenerator(FeatureGenerator):
         return ["mid_price"]
 
 
+class IdChangeGenerator(FeatureGenerator):
+    def __init__(self, col_alias_mapping):
+        super().__init__("id_change", col_alias_mapping)
+
+    def _generate(self, data):
+        id_col = self.get_col_alias(data, "id")
+        data[self.name] = data[id_col].diff()
+
+    def get_required_cols(self):
+        return ["id"]
+
+
+class DQGenerator(FeatureGenerator):
+    def __init__(self, col_alias_mapping, horizon="2min", tolerance='10s'):
+        super().__init__("dq", col_alias_mapping)
+        self.horizon = horizon
+        self.tolerance = tolerance
+
+    def _generate(self, data):
+        # get the last word from horizon as time unit. the word may be 'min', 's', 'h', etc.
+        match = re.match(r"(\d+)([a-zA-Z]+)", self.horizon)
+        time_unit = match.group(2)
+        steps = int(match.group(1))
+        one_unit = '1' + time_unit
+        mid = self.get_col_alias(data, "mid_price")
+        temp_df = data[[mid]].resample(one_unit).last().ffill().rolling(self.horizon).mean().shift(-steps, freq=one_unit)
+        temp_df.columns = [self.name]
+        data[self.name] = pd.merge_asof(data, temp_df, left_index=True, right_index=True, tolerance=pd.Timedelta(self.tolerance))[self.name]
+
+    def get_required_cols(self):
+        return ["mid_price"]
+
+
 class FeatureFactory:
     def __init__(self, col_alias_mapping):
         self.col_alias_mapping = col_alias_mapping
         self.generators = {
             "mid_price": MidPriceGenerator(col_alias_mapping),
             "spread": SpreadGenerator(col_alias_mapping),
-            "log_return": LogReturnGenerator(col_alias_mapping)
+            "log_return": LogReturnGenerator(col_alias_mapping),
+            "id_change": IdChangeGenerator(col_alias_mapping),
+            "dq": DQGenerator(col_alias_mapping)
         }
 
     def __has_feature(self, data, col):
@@ -141,16 +177,21 @@ class FeatureFactory:
 if __name__ == "__main__":
     # load col_aliases.json as a dict
     import json
+    import datetime
+
     with open("col_aliases.json", "r") as f:
         mapping = json.load(f)
 
     df = pd.DataFrame({
-        "bid_price": [100, 150],
-        "ask_price": [110, 160],
-        "bid_volume": [10, 20],
-        "ask_volume": [5, 10]
+        "bid_price": [100, 150, 200, 250, 300, 350, 400, 450, 500, 550],
+        "ask_price": [110, 160, 210, 260, 310, 360, 410, 460, 510, 560],
+        "bid_volume": [10, 20, 20, 30, 30, 40, 40, 50, 50, 60],
+        "ask_volume": [5, 10, 10, 15, 15, 20, 20, 25, 25, 30],
+        "id": [1, 9, 30, 30, 35, 60, 99, 102, 222, 245]
     })
+    df["time"] = [datetime.datetime(2020, 1, 1, 9, 30, 0) + datetime.timedelta(minutes=i) for i in range(len(df))]
+    df = df.set_index("time")
 
     factory = FeatureFactory(mapping)
-    factory.apply_features(df, ["spread", "log_return"])
+    factory.apply_features(df, ["spread", "log_return", "id_change", "dq"])
     print(df)

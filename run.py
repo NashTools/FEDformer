@@ -37,6 +37,7 @@ def main():
     parser.add_argument('--root_path', type=str, default='./dataset/ETT/', help='root path of the data file')
     parser.add_argument('--data_path', type=str, default='ETTh1.csv', help='data file')
     parser.add_argument('--data_prefix', type=str, default='', help='data file')
+    parser.add_argument('--zeros_pct', type=float, default=1.0, help='percentage of zero only input sequence included')
     parser.add_argument('--features', type=str, default='M',
                         help='forecasting task, options:[M, S, MS]; M:multivariate predict multivariate, '
                              'S:univariate predict univariate, MS:multivariate predict univariate')
