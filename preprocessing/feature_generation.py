@@ -107,11 +107,12 @@ class IdChangeGenerator(FeatureGenerator):
         return ["id"]
 
 
-class DQGenerator(FeatureGenerator):
-    def __init__(self, col_alias_mapping, horizon="2min", tolerance='10s'):
+class DQgenerator(FeatureGenerator):
+    def __init__(self, col_alias_mapping, horizon="2min", tolerance='10s', as_log_return=True):
         super().__init__("dq", col_alias_mapping)
         self.horizon = horizon
         self.tolerance = tolerance
+        self.as_log_return = as_log_return
 
     def _generate(self, data):
         # get the last word from horizon as time unit. the word may be 'min', 's', 'h', etc.
@@ -123,6 +124,9 @@ class DQGenerator(FeatureGenerator):
         temp_df = data[[mid]].resample(one_unit).last().ffill().rolling(self.horizon).mean().shift(-steps, freq=one_unit)
         temp_df.columns = [self.name]
         data[self.name] = pd.merge_asof(data, temp_df, left_index=True, right_index=True, tolerance=pd.Timedelta(self.tolerance))[self.name]
+        if self.as_log_return:
+            data[self.name] = data[self.name].apply(lambda x: math.log(x)) - data[mid].apply(lambda x: math.log(x))
+            data[self.name] = data[self.name].round(6).apply(lambda x: 0.0 if x == -0.0 else x)
 
     def get_required_cols(self):
         return ["mid_price"]
@@ -136,7 +140,7 @@ class FeatureFactory:
             "spread": SpreadGenerator(col_alias_mapping),
             "log_return": LogReturnGenerator(col_alias_mapping),
             "id_change": IdChangeGenerator(col_alias_mapping),
-            "dq": DQGenerator(col_alias_mapping)
+            "dq": DQgenerator(col_alias_mapping)
         }
 
     def __has_feature(self, data, col):

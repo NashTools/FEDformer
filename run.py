@@ -39,9 +39,10 @@ def main():
     parser.add_argument('--data_prefix', type=str, default='', help='data file')
     parser.add_argument('--zeros_pct', type=float, default=1.0, help='percentage of zero only input sequence included')
     parser.add_argument('--features', type=str, default='M',
-                        help='forecasting task, options:[M, S, MS]; M:multivariate predict multivariate, '
-                             'S:univariate predict univariate, MS:multivariate predict univariate')
+                        help='forecasting task, options:[M, S, MS, MR]; M:multivariate predict multivariate, '
+                             'S:univariate predict univariate, MS:multivariate predict univariate, MR:multivariate regression')
     parser.add_argument('--target', type=str, default='OT', help='target feature in S or MS task')
+    parser.add_argument('--count_target', type=str, default='OT', help='target feature used to filter out zero only input sequence')
     parser.add_argument('--freq', type=str, default='h',
                         help='freq for time features encoding, options:[s:secondly, t:minutely, h:hourly, d:daily, '
                              'b:business days, w:weekly, m:monthly], you can also use more detailed freq like 15min or 3h')
@@ -134,7 +135,7 @@ def main():
 
             exp = Exp(args)  # set experiments
             print('>>>>>>>start training : {}>>>>>>>>>>>>>>>>>>>>>>>>>>'.format(setting))
-            exp.train(setting)
+            exp.train_regression(setting)
 
             print('>>>>>>>testing : {}<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<'.format(setting))
             exp.test(setting)

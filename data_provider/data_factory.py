@@ -49,9 +49,11 @@ def data_provider(args, flag):
             file_name=args.data_prefix + '-' + flag + '.pkl',
             size=[args.seq_len, args.label_len, args.pred_len],
             target=args.target,
+            count_target=args.count_target,
             zeros_pct=args.zeros_pct,
             selected_data_src=args.data_prefix + '-' + flag + '_selected.pkl',
             freq=freq,
+            features=args.features
         )
     else:
         data_set = Data(

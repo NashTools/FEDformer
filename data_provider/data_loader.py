@@ -21,25 +21,33 @@ class Data_Fragment_Info:
 
 
 class Dataset_Single_File(Dataset):
-    def __init__(self, root_path, file_name, size, target, zeros_pct=1.0, selected_data_src=None, scale=True, freq='u'):
+    def __init__(self, root_path, file_name, size, target, count_target, zeros_pct=1.0, selected_data_src=None, scale=True, freq='u', features='MR'):
         self.seq_len = size[0]
         self.label_len = size[1]
         self.pred_len = size[2]
 
         self.target = target
+        self.count_target = count_target
         self.scale = scale
-        self.zero_scaled = 0
+        self.count_target_zero_scaled = 0
+        self.zero_scaled_input = None
         self.zeros_pct = zeros_pct
         self.freq = freq
+        self.features = features
 
         self.root_path = root_path
         self.file_name = file_name
         self.target_index = None
+        self.count_target_index = None
+        self.training_indices = []
         self.selected_data = []
         self.__read_data__()
 
         if zeros_pct < 1.0 and selected_data_src is None:
             self.__count__()
+            # save date_set.selected_data to a file
+            with open(os.path.join(self.root_path, self.file_name[:-4] + '_selected.pkl'), 'wb') as f:
+                pickle.dump(self.selected_data, f)
 
         if selected_data_src is not None:
             self.__read_selected_data__(selected_data_src),
@@ -47,7 +55,10 @@ class Dataset_Single_File(Dataset):
     def __read_data__(self):
         self.scaler = StandardScaler()
         self.data = pd.read_pickle(os.path.join(self.root_path, self.file_name))
+        self.data = self.data.drop(self.data.filter(regex='price').columns, axis=1)
         self.target_index = self.data.columns.get_loc(self.target)
+        self.count_target_index = self.data.columns.get_loc(self.count_target)
+        self.training_indices = [i for i in range(self.data.shape[1]) if i != self.target_index]
         self.data_stamp = time_features(self.data.index, freq=self.freq)
         self.data_stamp = self.data_stamp.transpose(1, 0)
         if self.scale:
@@ -55,18 +66,23 @@ class Dataset_Single_File(Dataset):
             self.data = self.scaler.transform(self.data.values)
             # create zero matrix with the same dimensions as the self.data
             zero_matrix = np.zeros(self.data.shape)
-            self.zero_scaled = self.scaler.transform(zero_matrix)[0][self.target_index]
+            self.zero_scaled_input = self.scaler.transform(zero_matrix)[0]
+            self.count_target_zero_scaled = self.zero_scaled_input[self.count_target_index]
 
     def __read_selected_data__(self, selected_data_src):
         path = os.path.join(self.root_path, selected_data_src)
         with open(path, 'rb') as data:
             self.selected_data = pickle.load(data)
+        print(f'selected = {len(self.selected_data)}')
+        print(f'total = {len(self.data)}')
+        print(f'% = {len(self.selected_data)/len(self.data)}')
+
 
     def __count__(self):
         num_data = len(self.data) - self.seq_len - self.pred_len + 1
-        zero_array = np.full(self.seq_len, self.zero_scaled)
+        zero_array = np.full(self.seq_len, self.count_target_zero_scaled)
         for i in range(num_data):
-            seq_x, seq_y = self.__get_x_y__(i, self.target_index)
+            seq_x, _ = self.__get_x_y__(i, self.count_target_index)
 
             # check if seq_x only contains zeros
             seq_x_zero = np.isclose(seq_x, zero_array).all()
@@ -94,6 +110,16 @@ class Dataset_Single_File(Dataset):
             seq_y = self.data[r_begin:r_end, selected_col_idx]
         return seq_x, seq_y
 
+    def __get_x_y_regression__(self, index):
+        s_end = index + self.seq_len
+        # self.data is a numpy ndarray. Select all columns except the target column with index self.target_index
+        seq_x = self.data[index:s_end, self.training_indices]
+        seq_y = self.data[s_end - 1, self.target_index]
+        return seq_x, seq_y
+
+    def get_zero_scaled(self, feature_idx):
+        return self.zero_scaled_input[feature_idx]
+
     def __len__(self):
         if self.zeros_pct < 1.0:
             return len(self.selected_data)
@@ -101,12 +127,14 @@ class Dataset_Single_File(Dataset):
             return len(self.data) - self.seq_len - self.pred_len + 1
 
     def __getitem__(self, index):
+        i = index
         if self.zeros_pct < 1.0:
-            index = self.selected_data[index]
-        seq_x, seq_y = self.__get_x_y__(index)
-        seq_x_mark = self.data_stamp[index:index + self.seq_len]
-        seq_y_mark = self.data_stamp[index + self.seq_len - self.label_len:index + self.seq_len + self.pred_len]
-        return seq_x, seq_y, seq_x_mark, seq_y_mark
+            i = self.selected_data[i]
+        if self.features == 'MR':
+            seq_x, seq_y = self.__get_x_y_regression__(i)
+        else:
+            seq_x, seq_y = self.__get_x_y__(i)
+        return seq_x, seq_y
 
 
 class Dataset_Multi_Files2(Dataset):
