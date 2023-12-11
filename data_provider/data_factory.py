@@ -1,10 +1,11 @@
-from data_provider.data_loader import Dataset_Custom, Dataset_Pred, Dataset_Simulation, Dataset_Multi_Files, Dataset_Single_File
+from data_provider.data_loader import Dataset_Custom, Dataset_Pred, Dataset_Simulation, Dataset_Multi_Files, Dataset_Single_File, Dataset_OJ
 from torch.utils.data import DataLoader
 
 data_dict = {
     'custom': Dataset_Custom,
     'multi': Dataset_Multi_Files,
-    'single': Dataset_Single_File
+    'single': Dataset_Single_File,
+    'oj': Dataset_OJ
 }
 
 
@@ -44,17 +45,55 @@ def data_provider(args, flag):
             freq=freq,
         )
     elif args.data == 'single':
-        data_set = Dataset_Single_File(
-            root_path=args.root_path,
-            file_name=args.data_prefix + '-' + flag + '.pkl',
-            size=[args.seq_len, args.label_len, args.pred_len],
-            target=args.target,
-            count_target=args.count_target,
-            zeros_pct=args.zeros_pct,
-            selected_data_src=args.data_prefix + '-' + flag + '_selected.pkl',
-            freq=freq,
-            features=args.features
-        )
+        if flag == 'train':
+            data_set = Dataset_Single_File(
+                root_path=args.root_path,
+                file_name=args.data_prefix + '-' + flag + '.pkl',
+                size=[args.seq_len, args.label_len, args.pred_len],
+                target=args.target,
+                count_target=args.count_target,
+                zeros_pct=args.zeros_pct,
+                selected_data_src=args.data_prefix + '-' + flag + '_selected.pkl',
+                freq=freq,
+                features=args.features
+            )
+        elif flag == 'val':
+            data_set = Dataset_Single_File(
+                root_path=args.root_path,
+                file_name=args.data_prefix + '-' + flag + '.pkl',
+                size=[args.seq_len, args.label_len, args.pred_len],
+                target=args.target,
+                count_target=args.count_target,
+                zeros_pct=args.zeros_pct,
+                selected_data_src=args.data_prefix + '-' + flag + '_selected.pkl',
+                freq=freq,
+                features=args.features
+            )
+    elif args.data == 'oj':
+        if flag == 'train':
+            data_set = Dataset_OJ(
+                data_path=args.data_path,
+                scale=True,
+                subset_start=0, # 0
+                subset_end=15000000, # 15000000
+                seq_len=args.seq_len
+            )
+        elif flag == 'val':
+            data_set = Dataset_OJ(
+                data_path=args.data_path,
+                scale=False,
+                subset_start=15000000, # 15000000
+                subset_end=22500000, # 22500000
+                seq_len=args.seq_len
+            )
+        else:
+            data_set = Dataset_OJ(
+                data_path=args.data_path,
+                scale=False,
+                subset_start=22500000, # 22500000
+                subset_end=30000000, # 30000000
+                seq_len=args.seq_len
+            )
     else:
         data_set = Data(
             root_path=args.root_path,

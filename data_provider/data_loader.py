@@ -1,14 +1,39 @@
 import pickle
+import zipfile
 
 import numpy as np
 import pandas as pd
 import os
-from torch.utils.data import Dataset
+from torch.utils.data import Dataset, DataLoader
 from sklearn.preprocessing import StandardScaler
 from utils.timefeatures import time_features
 import warnings
 
 warnings.filterwarnings('ignore')
+
+
+def normalize(data: pd.DataFrame):
+    scaler = StandardScaler()
+    scaler.fit(data.values)
+    zero_matrix = np.zeros(data.shape)
+    zero_scaled_input = scaler.transform(zero_matrix)[0]
+    return scaler.transform(data.values), zero_scaled_input
+
+
+def unzip_file(zip_file_path):
+    extract_folder = os.path.splitext(zip_file_path)[0]  # Use the zip file's name as the extract folder
+    with zipfile.ZipFile(zip_file_path, 'r') as zip_ref:
+        zip_ref.extractall(extract_folder)
+    return extract_folder
+
+
+def delete_unpacked_files(folder_path):
+    for root, dirs, files in os.walk(folder_path, topdown=False):
+        for file in files:
+            os.remove(os.path.join(root, file))
+        for dir in dirs:
+            os.rmdir(os.path.join(root, dir))
+    os.rmdir(folder_path)
 
 
 class Data_Fragment_Info:
@@ -20,20 +45,60 @@ class Data_Fragment_Info:
         self.end_index = end_index
 
 
+class Dataset_OJ(Dataset):
+    def __init__(self, data_path, scale=False, subset_start=None, subset_end=None, seq_len=1):
+        self.data_path = data_path
+        self.scale = scale
+        self.x_features = None
+        self.x_location = None
+        self.y = None
+        self.scaler = StandardScaler()
+        self.subset_start = subset_start
+        self.subset_end = subset_end
+        self.seq_len = seq_len
+        self.target_index = None
+        self.__read_data__()
+
+    def __read_data__(self):
+        df = pd.read_pickle(self.data_path)
+        print(f'len(df) = {len(df)}')
+        df = df[self.subset_start:self.subset_end]
+
+        self.target_index = df.columns.get_loc('dq')
+        self.zero_scaled_input = np.zeros(df.shape[1])
+
+        self.x_features = df.loc[:, 'b_f1':'basis'].values
+        self.x_location = df.loc[:, ['timestep']].values
+        self.y = df.loc[:, 'dq'].values.reshape(-1, 1)
+        del df
+
+    def __len__(self):
+        return len(self.y) - self.seq_len
+
+    def __getitem__(self, index):
+        ticker_feature = self.x_features[index:index+self.seq_len]
+        ticker_location = self.x_location[index:index+self.seq_len, :]
+        dq = self.y[index+self.seq_len-1:index+self.seq_len]
+        full = np.concatenate((ticker_feature, ticker_location - ticker_location[-1]), axis=1)
+        return full, dq[0][0]
+
+
+
 class Dataset_Single_File(Dataset):
     def __init__(self, root_path, file_name, size, target, count_target, zeros_pct=1.0, selected_data_src=None, scale=True, freq='u', features='MR'):
         self.seq_len = size[0]
         self.label_len = size[1]
         self.pred_len = size[2]
 
+        self.data = None
         self.target = target
         self.count_target = count_target
         self.scale = scale
         self.count_target_zero_scaled = 0
-        self.zero_scaled_input = None
         self.zeros_pct = zeros_pct
         self.freq = freq
         self.features = features
+        self.scaler = StandardScaler()
 
         self.root_path = root_path
         self.file_name = file_name
@@ -53,21 +118,28 @@ class Dataset_Single_File(Dataset):
             self.__read_selected_data__(selected_data_src),
 
     def __read_data__(self):
-        self.scaler = StandardScaler()
         self.data = pd.read_pickle(os.path.join(self.root_path, self.file_name))
         self.data = self.data.drop(self.data.filter(regex='price').columns, axis=1)
         self.target_index = self.data.columns.get_loc(self.target)
         self.count_target_index = self.data.columns.get_loc(self.count_target)
         self.training_indices = [i for i in range(self.data.shape[1]) if i != self.target_index]
-        self.data_stamp = time_features(self.data.index, freq=self.freq)
-        self.data_stamp = self.data_stamp.transpose(1, 0)
+
+        self.zero_scaled_input = np.zeros(self.data.shape[1])
+
         if self.scale:
             self.scaler.fit(self.data.values)
             self.data = self.scaler.transform(self.data.values)
-            # create zero matrix with the same dimensions as the self.data
             zero_matrix = np.zeros(self.data.shape)
             self.zero_scaled_input = self.scaler.transform(zero_matrix)[0]
             self.count_target_zero_scaled = self.zero_scaled_input[self.count_target_index]
+        else:
+            self.data = self.data.values
+
+    def normalize_data(self, data: pd.DataFrame):
+        self.scaler.fit(data.values)
+        self.data = self.scaler.transform(data.values)
+        zero_matrix = np.zeros(self.data.shape)
+        self.zero_scaled_input = self.scaler.transform(zero_matrix)[0]
 
     def __read_selected_data__(self, selected_data_src):
         path = os.path.join(self.root_path, selected_data_src)
@@ -517,18 +589,37 @@ class Dataset_Simulation(Dataset):
 
 # main
 if __name__ == '__main__':
-    root_path = '../dataset/ticker/'
-    file_name = 'seven-days-train.pkl'
-    data_set = Dataset_Single_File(
-        root_path=root_path,
-        file_name=file_name,
-        size=[128, 64, 128],
-        target='log_return_s',
-        zeros_pct=0.03,
-        scale=True
+    data_set = Dataset_OJ(
+        data_path='/home/tony/PycharmProjects/PricingNn/df1.zip',
+        subset_start=0,
+        subset_end=1000,
+        seq_len=30
     )
-    print(len(data_set))
-    print(len(data_set) / (len(data_set.data) - data_set.seq_len - data_set.pred_len + 1))
-    # save date_set.selected_data to a file
-    with open('../dataset/ticker/seven-days-train_selected.pkl', 'wb') as f:
-        pickle.dump(data_set.selected_data, f)
+    # x, y = data_set.__getitem__(0)
+    # print(f'len(ds) = {len(x)}')
+    # print(f'x = {x.shape}')
+
+
+    # root_path = '../dataset/ticker/'
+    # file_name = 'seven-days-dq-train.pkl'
+    # data_set = Dataset_Single_File(
+    #     root_path=root_path,
+    #     file_name=file_name,
+    #     size=[15, 0, 0],
+    #     target='dq_s',
+    #     count_target='log_return_s',
+    #     zeros_pct=0.1,
+    #     selected_data_src='seven-days-dq-train_selected.pkl',
+    #     scale=False,
+    #     features='MR'
+    # )
+
+    data_loader = DataLoader(
+        data_set,
+        batch_size=32,
+        shuffle=True,
+        num_workers=1,
+        drop_last=True)
+
+    for i, (batch_x, batch_y) in enumerate(data_loader):
+        print(f'x: {batch_x[-1]} | y: {batch_y}')

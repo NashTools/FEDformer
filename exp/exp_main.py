@@ -7,7 +7,7 @@ import torch.nn as nn
 from torch import optim
 from data_provider.data_factory import data_provider
 from exp.exp_basic import Exp_Basic
-from models import FEDformer, Autoformer, Informer, Transformer, FEDformerRegression
+from models import FEDformer, Autoformer, Informer, Transformer, FEDformerRegression, TransformerRegression, TransformerOJ
 from utils.tools import EarlyStopping, adjust_learning_rate, visual
 from utils.metrics import metric
 
@@ -25,6 +25,8 @@ class Exp_Main(Exp_Basic):
             'FEDformerRegression': FEDformerRegression,
             'Autoformer': Autoformer,
             'Transformer': Transformer,
+            'TransformerRegression': TransformerRegression,
+            'TransformerOJ': TransformerOJ,
             'Informer': Informer,
         }
         model = model_dict[self.args.model].Model(self.args).float()
@@ -42,7 +44,7 @@ class Exp_Main(Exp_Basic):
         return model_optim
 
     def _select_criterion(self):
-        criterion = nn.MSELoss()
+        criterion = nn.HuberLoss(delta=10)
         return criterion
 
     def vali(self, vali_data, vali_loader, criterion):
@@ -83,6 +85,31 @@ class Exp_Main(Exp_Basic):
         total_loss = np.average(total_loss)
         self.model.train()
         return total_loss
+
+    def vali_regression(self, vali_data, vali_loader, criterion):
+        total_loss = []
+        baseline_loss = []
+        self.model.eval()
+
+        baseline_scaled = np.full((32,), vali_data.zero_scaled_input[vali_data.target_index])
+        baseline_scaled_tensor = torch.from_numpy(baseline_scaled).float().to(self.device)
+
+        with torch.no_grad():
+            for i, (batch_x, batch_y) in enumerate(vali_loader):
+                batch_x_tensor = batch_x.float().to(self.device)
+                batch_y_tensor = batch_y.float().to(self.device)
+                outputs = self.model(batch_x_tensor)
+
+                loss = criterion(outputs.view(-1), batch_y_tensor)
+                total_loss.append(loss.item())
+
+                bloss = criterion(baseline_scaled_tensor, batch_y_tensor).item()
+                baseline_loss.append(bloss)
+
+        total_loss = np.average(total_loss)
+        baseline_loss = np.average(baseline_loss)
+        self.model.train()
+        return total_loss, baseline_loss
 
     def train(self, setting):
         train_data, train_loader = self._get_data(flag='train')
@@ -184,7 +211,7 @@ class Exp_Main(Exp_Basic):
 
     def train_regression(self, setting):
         train_data, train_loader = self._get_data(flag='train')
-        # vali_data, vali_loader = self._get_data(flag='val')
+        vali_data, vali_loader = self._get_data(flag='val')
         # test_data, test_loader = self._get_data(flag='test')
 
         path = os.path.join(self.args.checkpoints, setting)
@@ -221,7 +248,7 @@ class Exp_Main(Exp_Basic):
                 else:
                     outputs = self.model(batch_x_tensor)
 
-                loss = criterion(outputs, batch_y_tensor)
+                loss = criterion(outputs.view(-1), batch_y_tensor)
                 train_loss.append(loss.item())
 
                 bloss = criterion(baseline_scaled_tensor, batch_y_tensor).item()
@@ -239,13 +266,13 @@ class Exp_Main(Exp_Basic):
                 model_optim.step()
 
             print("Epoch: {} cost time: {}".format(epoch + 1, time.time() - epoch_time))
-            # train_loss = np.average(train_loss)
-            # vali_loss = self.vali(vali_data, vali_loader, criterion)
+            train_loss = np.average(train_loss)
+            vali_loss, vali_baseline_loss = self.vali_regression(vali_data, vali_loader, criterion)
             # test_loss = self.vali(test_data, test_loader, criterion)
 
-            # print("Epoch: {0}, Steps: {1} | Train Loss: {2:.7f} Vali Loss: {3:.7f} Test Loss: {4:.7f}".format(
-            #     epoch + 1, train_steps, train_loss, vali_loss, test_loss))
-            # early_stopping(vali_loss, self.model, path)
+            print("Epoch: {0}, Steps: {1} | Train Loss: {2:.7f} Vali Loss: {3:.7f} Vali Baseline Loss: {4:.7f}".format(
+                epoch + 1, train_steps, train_loss, vali_loss, vali_baseline_loss))
+            early_stopping(vali_loss, self.model, path)
             if early_stopping.early_stop:
                 print("Early stopping")
                 break
@@ -253,7 +280,8 @@ class Exp_Main(Exp_Basic):
             adjust_learning_rate(model_optim, epoch + 1, self.args)
 
         best_model_path = path + '/' + 'checkpoint.pth'
-        self.model.load_state_dict(torch.load(best_model_path))
+        # self.model.load_state_dict(torch.load(best_model_path))
+        torch.save(self.model.state_dict(), str(best_model_path))
 
         return self.model
 
@@ -338,6 +366,50 @@ class Exp_Main(Exp_Basic):
         np.save(folder_path + 'true.npy', trues)
 
         return
+
+    def test_regression(self, setting, test=True):
+        test_data, test_loader = self._get_data(flag='test')
+        if test:
+            print('loading model')
+            self.model.load_state_dict(torch.load(os.path.join('./checkpoints/' + setting, 'checkpoint.pth')))
+            print('model loaded')
+
+        total_loss = []
+        baseline_loss = []
+        self.model.eval()
+        criterion = self._select_criterion()
+
+        baseline_scaled = np.full((32,), test_data.zero_scaled_input[test_data.target_index])
+        baseline_scaled_tensor = torch.from_numpy(baseline_scaled).float().to(self.device)
+
+        time_now = time.time()
+        test_steps = len(test_loader)
+        iter_count = 0
+        with torch.no_grad():
+            for i, (batch_x, batch_y) in enumerate(test_loader):
+                iter_count += 1
+                batch_x_tensor = batch_x.float().to(self.device)
+                batch_y_tensor = batch_y.float().to(self.device)
+                outputs = self.model(batch_x_tensor)
+
+                loss = criterion(outputs.view(-1), batch_y_tensor)
+                total_loss.append(loss.item())
+
+                bloss = criterion(baseline_scaled_tensor, batch_y_tensor).item()
+                baseline_loss.append(bloss)
+
+                if (i + 1) % 1000 == 0:
+                    print("\titers: {0}, loss: {1:.7f} | baseline: {2:.7f}".format(i + 1, np.average(total_loss), np.average(baseline_loss)))
+                    speed = (time.time() - time_now) / iter_count
+                    left_time = speed * (test_steps - i)
+                    print('\tspeed: {:.4f}s/iter; left time: {:.4f}s'.format(speed, left_time))
+                    iter_count = 0
+                    time_now = time.time()
+
+        total_loss = np.average(total_loss)
+        baseline_loss = np.average(baseline_loss)
+        print("Test Loss: {0:.7f} Test Baseline Loss: {1:.7f}".format(total_loss, baseline_loss))
+        return total_loss, baseline_loss
 
     def predict(self, setting, load=False):
         pred_data, pred_loader = self._get_data(flag='pred')
