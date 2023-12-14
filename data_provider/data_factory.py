@@ -75,23 +75,23 @@ def data_provider(args, flag):
                 data_path=args.data_path,
                 scale=True,
                 subset_start=0, # 0
-                subset_end=15000000, # 15000000
+                subset_end=250000000, # 15000000
                 seq_len=args.seq_len
             )
         elif flag == 'val':
             data_set = Dataset_OJ(
                 data_path=args.data_path,
                 scale=False,
-                subset_start=15000000, # 15000000
-                subset_end=22500000, # 22500000
+                subset_start=650000000, # 15000000
+                subset_end=700000000, # 22500000
                 seq_len=args.seq_len
             )
         else:
             data_set = Dataset_OJ(
                 data_path=args.data_path,
                 scale=False,
-                subset_start=22500000, # 22500000
-                subset_end=30000000, # 30000000
+                subset_start=700000000, # 22500000
+                subset_end=700010000, # 30000000, 750000000
                 seq_len=args.seq_len
             )
     else:

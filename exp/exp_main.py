@@ -11,7 +11,6 @@ from models import FEDformer, Autoformer, Informer, Transformer, FEDformerRegres
 from utils.tools import EarlyStopping, adjust_learning_rate, visual
 from utils.metrics import metric
 
-
 warnings.filterwarnings('ignore')
 
 
@@ -255,7 +254,8 @@ class Exp_Main(Exp_Basic):
                 baseline_loss.append(bloss)
 
                 if (i + 1) % 1000 == 0:
-                    print("\titers: {0}, epoch: {1} | loss: {2:.7f} | baseline: {3:.7f}".format(i + 1, epoch + 1, np.average(train_loss), np.average(baseline_loss)))
+                    print("\titers: {0}, epoch: {1} | loss: {2:.7f} | baseline: {3:.7f}".format(i + 1, epoch + 1, np.average(train_loss),
+                                                                                                np.average(baseline_loss)))
                     speed = (time.time() - time_now) / iter_count
                     left_time = speed * ((self.args.train_epochs - epoch) * train_steps - i)
                     print('\tspeed: {:.4f}s/iter; left time: {:.4f}s'.format(speed, left_time))
@@ -279,9 +279,9 @@ class Exp_Main(Exp_Basic):
 
             adjust_learning_rate(model_optim, epoch + 1, self.args)
 
-        best_model_path = path + '/' + 'checkpoint.pth'
+        # best_model_path = path + '/' + 'checkpoint.pth'
         # self.model.load_state_dict(torch.load(best_model_path))
-        torch.save(self.model.state_dict(), str(best_model_path))
+        # torch.save(self.model.state_dict(), str(best_model_path))
 
         return self.model
 
@@ -522,7 +522,7 @@ class Exp_Main(Exp_Basic):
 
                 pred_sum_logreturns = np.sum(inversed_scaled_outputs[0:self.args.steps_look_ahead, 4])
                 pred_change = np.exp(pred_sum_logreturns)
-                preds.append(pred_change) # outputs.detach().cpu().numpy()  # .squeeze()
+                preds.append(pred_change)  # outputs.detach().cpu().numpy()  # .squeeze()
 
                 true_sum_logreturns = np.sum(inversed_scaled_batch_y[0:self.args.steps_look_ahead, 4])
                 true_change = np.exp(true_sum_logreturns)
@@ -537,3 +537,12 @@ class Exp_Main(Exp_Basic):
             print((time.time() - time_now) / i * 1000000)
 
         return preds, trues, metric_trues, metric_preds, metric_baselines
+
+    def dump_model(self, setting, dump_name):
+        self.model.load_state_dict(torch.load(os.path.join('./checkpoints/' + setting, 'checkpoint.pth')))
+        test_data, test_loader = self._get_data(flag='test')
+        with torch.no_grad():
+            for (batch_x, batch_y) in test_loader:
+                batch_x = batch_x.float().to(self.device)
+                torch.jit.trace(self.model, batch_x).save(dump_name)
+                break
